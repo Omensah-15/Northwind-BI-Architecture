@@ -1,7 +1,11 @@
 /*
 Question:
 Identify customers who have purchased products from all categories available in their country.
+
 Business impact:
+Immediate Revenue Opportunity: These customers are your most diverse, loyal, and high-potential buyers. 
+They have the highest lifetime value and represent your best upsell/cross-sell targets for new products.
+
 Apraoch:
 */
 
