@@ -7,7 +7,6 @@ Immediate Revenue Opportunity: These customers are your most diverse, loyal, and
 They have the highest lifetime value and represent your best upsell/cross-sell targets for new products.
 
 Apraoch:
-
 */
 
 
