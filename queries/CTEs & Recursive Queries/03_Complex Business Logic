@@ -1,0 +1,97 @@
+/*
+Question:
+Using CTEs, implement a complex commission calculation:
+Base 5% on sales
+Bonus 2% if above team average
+Additional 1% if customer retention > 80%
+ */
+WITH 
+-- Step 1: Calculate individual sales performance (using ALL data)
+EmployeeSales AS (
+    SELECT 
+        e.EmployeeID,
+        e.FirstName || ' ' || e.LastName AS EmployeeName,
+        e.Title,
+        COUNT(DISTINCT o.OrderID) AS TotalOrders,
+        SUM(od.Quantity * od.UnitPrice) AS TotalSales,
+        COUNT(DISTINCT o.CustomerID) AS UniqueCustomers
+    FROM Employees e
+    JOIN Orders o ON e.EmployeeID = o.EmployeeID
+    JOIN "Order Details" od ON o.OrderID = od.OrderID
+    WHERE o.OrderDate IS NOT NULL
+    GROUP BY e.EmployeeID
+),
+
+-- Step 2: Calculate team averages (by title/department)
+TeamAverages AS (
+    SELECT 
+        Title,
+        AVG(TotalSales) AS AvgTeamSales,
+        COUNT(*) AS TeamSize
+    FROM EmployeeSales
+    GROUP BY Title
+),
+
+-- Step 3: Calculate customer retention (simplified)
+RetentionRates AS (
+    SELECT 
+        o.EmployeeID,
+        COUNT(DISTINCT o.CustomerID) AS TotalCustomers,
+        COUNT(DISTINCT CASE 
+            WHEN o.CustomerID IN (
+                SELECT CustomerID 
+                FROM Orders 
+                WHERE EmployeeID = o.EmployeeID 
+                GROUP BY CustomerID 
+                HAVING COUNT(*) > 1
+            ) THEN o.CustomerID 
+        END) AS RetainedCustomers
+    FROM Orders o
+    GROUP BY o.EmployeeID
+)
+
+-- Final: Calculate commission
+SELECT 
+    es.EmployeeID,
+    es.EmployeeName,
+    es.Title,
+    ROUND(es.TotalSales, 2) AS TotalSales,
+    es.TotalOrders,
+    es.UniqueCustomers,
+    
+    -- Base 5%
+    ROUND(es.TotalSales * 0.05, 2) AS BaseCommission,
+    
+    -- Bonus 2% if above team average
+    CASE 
+        WHEN es.TotalSales > ta.AvgTeamSales 
+        THEN ROUND(es.TotalSales * 0.02, 2)
+        ELSE 0 
+    END AS AboveAvgBonus,
+    
+    -- Bonus 1% if retention > 80%
+    CASE 
+        WHEN (rr.RetainedCustomers * 1.0 / NULLIF(rr.TotalCustomers, 0)) > 0.8 
+        THEN ROUND(es.TotalSales * 0.01, 2)
+        ELSE 0 
+    END AS RetentionBonus,
+    
+    -- Total commission
+    ROUND(
+        (es.TotalSales * 0.05) +
+        CASE WHEN es.TotalSales > ta.AvgTeamSales THEN es.TotalSales * 0.02 ELSE 0 END +
+        CASE WHEN (rr.RetainedCustomers * 1.0 / NULLIF(rr.TotalCustomers, 0)) > 0.8 THEN es.TotalSales * 0.01 ELSE 0 END,
+        2
+    ) AS TotalCommission,
+    
+    -- Show retention rate for visibility
+    ROUND(100.0 * rr.RetainedCustomers / NULLIF(rr.TotalCustomers, 0), 1) || '%' AS RetentionRate,
+    
+    -- Show team comparison
+    ROUND(ta.AvgTeamSales, 2) AS AvgTeamSales
+    
+FROM EmployeeSales es
+LEFT JOIN TeamAverages ta ON es.Title = ta.Title
+LEFT JOIN RetentionRates rr ON es.EmployeeID = rr.EmployeeID
+WHERE es.TotalSales > 0  -- Only show employees with sales
+ORDER BY TotalCommission DESC;
