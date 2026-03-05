@@ -14,7 +14,7 @@ WITH customer_employee_years AS (
     SELECT DISTINCT
         o.CustomerID,
         o.EmployeeID,
-        YEAR(o.OrderDate) AS order_year
+        strftime('%Y', o.OrderDate) AS order_year
     FROM Orders o
     WHERE o.OrderDate IS NOT NULL
 ),
@@ -25,7 +25,7 @@ consecutive_years AS (
         EmployeeID,
         order_year,
         -- Create a group identifier for consecutive years
-        order_year - ROW_NUMBER() OVER (
+        CAST(order_year AS INTEGER) - ROW_NUMBER() OVER (
             PARTITION BY CustomerID, EmployeeID 
             ORDER BY order_year
         ) AS year_group
@@ -61,7 +61,7 @@ ranked_customers AS (
         c.CustomerID,
         c.CompanyName,
         ces.EmployeeID,
-        e.FirstName + ' ' + e.LastName AS EmployeeName,
+        e.FirstName || ' ' || e.LastName AS EmployeeName,
         ces.max_consecutive_years,
         ces.first_year,
         ces.last_year,
