@@ -1,0 +1,90 @@
+/*
+ Question:
+Trace the complete supply chain for each product: supplier → shipper → customer, showing all possible paths.
+ */
+
+
+WITH product_supplier AS (
+    -- Get product and its supplier
+    SELECT 
+        p.ProductID,
+        p.ProductName,
+        s.SupplierID,
+        s.CompanyName AS SupplierName,
+        s.Country AS SupplierCountry
+    FROM Products p
+    JOIN Suppliers s ON p.SupplierID = s.SupplierID
+),
+product_orders AS (
+    -- Get all orders containing each product
+    SELECT 
+        ps.ProductID,
+        ps.ProductName,
+        ps.SupplierID,
+        ps.SupplierName,
+        ps.SupplierCountry,
+        od.OrderID,
+        od.UnitPrice,
+        od.Quantity,
+        o.ShipVia AS ShipperID,
+        o.CustomerID,
+        o.OrderDate,
+        o.ShipCountry AS DestinationCountry
+    FROM product_supplier ps
+    JOIN "Order Details" od ON ps.ProductID = od.ProductID
+    JOIN Orders o ON od.OrderID = o.OrderID
+),
+supply_chain_paths AS (
+    -- Build complete supply chain paths
+    SELECT 
+        po.ProductID,
+        po.ProductName,
+        po.SupplierID,
+        po.SupplierName,
+        po.SupplierCountry,
+        po.ShipperID,
+        sh.CompanyName AS ShipperName,
+        sh.Phone AS ShipperPhone,
+        po.CustomerID,
+        c.CompanyName AS CustomerName,
+        c.Country AS CustomerCountry,
+        po.OrderID,
+        po.OrderDate,
+        po.Quantity,
+        po.UnitPrice,
+        (po.Quantity * po.UnitPrice) AS LineTotal,
+        -- Create a path string for visualization
+        po.SupplierName || ' → ' || sh.CompanyName || ' → ' || c.CompanyName AS SupplyChainPath,
+        -- Count how many times this exact path was used
+        COUNT(*) OVER (PARTITION BY po.ProductID, po.SupplierID, po.ShipperID, po.CustomerID) AS PathFrequency
+    FROM product_orders po
+    JOIN Shippers sh ON po.ShipperID = sh.ShipperID
+    JOIN Customers c ON po.CustomerID = c.CustomerID
+)
+-- Final result with summarized paths
+SELECT 
+    ProductID,
+    ProductName,
+    SupplierID,
+    SupplierName,
+    SupplierCountry,
+    ShipperID,
+    ShipperName,
+    ShipperPhone,
+    CustomerID,
+    CustomerName,
+    CustomerCountry,
+    COUNT(DISTINCT OrderID) AS NumberOfOrders,
+    SUM(Quantity) AS TotalUnitsShipped,
+    SUM(LineTotal) AS TotalRevenue,
+    MIN(OrderDate) AS FirstOrderDate,
+    MAX(OrderDate) AS LastOrderDate,
+    SupplyChainPath,
+    PathFrequency
+FROM supply_chain_paths
+GROUP BY 
+    ProductID, ProductName, SupplierID, SupplierName, SupplierCountry,
+    ShipperID, ShipperName, ShipperPhone, CustomerID, CustomerName, 
+    CustomerCountry, SupplyChainPath, PathFrequency
+ORDER BY 
+    SupplierName, ProductName, CustomerName;
