@@ -1,0 +1,70 @@
+/*
+ Question:
+ Find all possible reporting chains and calculate the "influence factor" for each employee based on their network depth.
+ */
+WITH RECURSIVE OrgChart AS (
+    -- Build the organization hierarchy
+    SELECT 
+        EmployeeID,
+        FirstName || ' ' || LastName AS EmployeeName,
+        Title,
+        ReportsTo,
+        0 AS Level,
+        CAST(EmployeeID AS TEXT) AS Path,
+        FirstName || ' ' || LastName AS PathNames
+    FROM Employees
+    WHERE ReportsTo IS NULL
+    
+    UNION ALL
+    
+    SELECT 
+        e.EmployeeID,
+        e.FirstName || ' ' || e.LastName AS EmployeeName,
+        e.Title,
+        e.ReportsTo,
+        oc.Level + 1,
+        oc.Path || ',' || e.EmployeeID,
+        oc.PathNames || ' → ' || e.FirstName || ' ' || e.LastName
+    FROM Employees e
+    JOIN OrgChart oc ON e.ReportsTo = oc.EmployeeID
+),
+EmployeeStats AS (
+    -- Get all employees with their level and boss
+    SELECT 
+        e.EmployeeID,
+        e.FirstName || ' ' || e.LastName AS EmployeeName,
+        e.Title,
+        oc.Level,
+        oc.Path,
+        SUBSTR(oc.PathNames, 1, INSTR(oc.PathNames, ' → ') - 1) AS TopBossName
+    FROM Employees e
+    LEFT JOIN OrgChart oc ON e.EmployeeID = oc.EmployeeID
+),
+ReportCounts AS (
+    -- Count how many people report to each employee
+    SELECT 
+        oc2.EmployeeID AS BossID,
+        COUNT(*) AS ReportCount
+    FROM OrgChart oc1
+    JOIN OrgChart oc2 ON oc1.Path LIKE '%' || oc2.EmployeeID || '%' 
+                     AND oc1.EmployeeID != oc2.EmployeeID
+    GROUP BY oc2.EmployeeID
+)
+-- Final result
+SELECT 
+    es.EmployeeID,
+    es.EmployeeName,
+    es.Title,
+    COALESCE(es.Level, 0) AS Level,
+    COALESCE(rc.ReportCount, 0) AS PeopleUnderThem,
+    es.TopBossName AS UltimateBoss,
+    -- Influence = Level × 20 + PeopleUnderThem × 5
+    (COALESCE(es.Level, 0) * 20) + (COALESCE(rc.ReportCount, 0) * 5) AS InfluenceFactor,
+    CASE 
+        WHEN (COALESCE(es.Level, 0) * 20) + (COALESCE(rc.ReportCount, 0) * 5) >= 80 THEN 'High Influence'
+        WHEN (COALESCE(es.Level, 0) * 20) + (COALESCE(rc.ReportCount, 0) * 5) >= 40 THEN 'Medium Influence'
+        ELSE 'Low Influence'
+    END AS InfluenceCategory
+FROM EmployeeStats es
+LEFT JOIN ReportCounts rc ON es.EmployeeID = rc.BossID
+ORDER BY InfluenceFactor DESC, es.Level DESC;
